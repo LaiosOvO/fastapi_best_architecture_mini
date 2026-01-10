@@ -1,3 +1,6 @@
+import shutil
+
+from functools import lru_cache
 
 from typing import Any, Literal
 from pydantic import model_validator
@@ -38,12 +41,13 @@ class Settings(BaseSettings):
 
         return values
 
-# @lru_cache
-# def get_settings() -> Settings:
-#     """获取全局配置单例"""
-#     if not ENV_FILE_PATH.exists():
-#         shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
-#     return Settings()
+@lru_cache
+def get_settings() -> Settings:
+    """获取全局配置单例"""
+    if not ENV_FILE_PATH.exists():
+        shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
+    return Settings()
 
-setting = Settings()
+setting = get_settings()
+
 print(setting)
