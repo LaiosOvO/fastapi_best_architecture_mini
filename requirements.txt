@@ -427,3 +427,7 @@ zope-event==6.1
     # via gevent
 zope-interface==8.1.1
     # via gevent
+
+
+# ai
+langchain_community

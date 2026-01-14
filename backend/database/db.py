@@ -17,6 +17,7 @@ from backend.common.enums import DataBaseType
 from backend.common.log import log
 from backend.common.model import MappedBase
 from backend.core.conf import settings
+from backend.common.soft_delete import enable_soft_delete_filter
 
 def create_database_url(*, unittest: bool = False) -> URL:
     """
@@ -105,6 +106,10 @@ SQLALCHEMY_DATABASE_URL = create_database_url()
 
 # SALA 异步引擎和会话
 async_engine, async_db_session = create_async_engine_and_session(SQLALCHEMY_DATABASE_URL)
+
+# 启用全局逻辑删除过滤器
+enable_soft_delete_filter()
+log.info('✅ 已启用全局逻辑删除过滤器')
 
 # Session Annotated
 CurrentSession = Annotated[AsyncSession, Depends(get_db)]

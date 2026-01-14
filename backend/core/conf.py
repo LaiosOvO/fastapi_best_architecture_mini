@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Token 加密密钥
     TOKEN_SECRET_KEY: str = '1VkVF75nsNABBjK_7-qz7GtzNy3AMvktc9TCPwKczCk'  # 默认值，生产环境请修改
 
+    # 硅基流动 API 配置
+    SILICONFLOW_API_KEY: str
+
     DATABASE_TYPE: Literal['mysql', 'postgresql']
     DATABASE_HOST: str
     DATABASE_PORT: int

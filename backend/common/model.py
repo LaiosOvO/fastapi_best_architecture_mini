@@ -104,9 +104,23 @@ class DateTimeMixin(MappedAsDataclass):
     updated_time: Mapped[datetime | None] = mapped_column(
         TimeZone,
         init=False,
+        default=None,
         onupdate=timezone.now,
         sort_order=999,
         comment='更新时间',
+    )
+
+
+class SoftDeleteMixin(MappedAsDataclass):
+    """逻辑删除 Mixin 数据类"""
+
+    deleted: Mapped[int] = mapped_column(
+        sa.Integer,
+        init=False,
+        default=0,
+        index=True,
+        sort_order=1000,  # 确保在所有其他字段之后
+        comment='逻辑删除(0否 1是)',
     )
 
 
@@ -145,9 +159,10 @@ class DataClassBase(MappedAsDataclass, MappedBase):
     __abstract__ = True
 
 
-class Base(DataClassBase, DateTimeMixin):
+class Base(DataClassBase, DateTimeMixin, SoftDeleteMixin):
     """
     声明性数据类基类, 带有数据类集成, 并包含 MiXin 数据类基础表结构
+    包含创建时间、更新时间和逻辑删除字段
     """
 
     __abstract__ = True
