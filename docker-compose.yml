@@ -1,0 +1,171 @@
+# ===========================================
+# FastAPI Best Architecture Mini
+# Docker Compose 配置
+# ===========================================
+#
+# 服务：
+# - postgres: PostgreSQL 全能数据库（含所有扩展）
+# - redis: Redis 缓存
+# - app: FastAPI 应用
+#
+# 快速启动：
+#   docker-compose up -d
+#
+# 仅启动数据库：
+#   docker-compose up -d postgres redis
+#
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # PostgreSQL 数据库
+  # ==========================================
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    image: psql/16/all:laios-v1
+    container_name: fba-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_SCHEMA:-fba_mini}
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      # TimescaleDB 配置
+      TIMESCALEDB_TELEMETRY: 'off'
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/database/init_extensions.sql:/docker-entrypoint-initdb.d/10-init-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_SCHEMA:-fba_mini}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fba-network
+
+  # ==========================================
+  # 使用预构建的 PGVector 镜像（替代方案）
+  # 如果不需要 TimescaleDB 和 AGE，可以使用这个更轻量的镜像
+  # ==========================================
+  # postgres:
+  #   image: ankane/pgvector:v0.7.4-pg16
+  #   container_name: fba-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${DATABASE_SCHEMA:-fba_mini}
+  #     POSTGRES_USER: ${DATABASE_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+  #   ports:
+  #     - "${DATABASE_PORT:-5432}:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - fba-network
+
+  # ==========================================
+  # Redis 缓存
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: fba-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fba-network
+
+  # ==========================================
+  # FastAPI 应用
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fba-app:latest
+    container_name: fba-app
+    restart: unless-stopped
+    environment:
+      # 环境
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      # 数据库
+      DATABASE_TYPE: postgresql
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      DATABASE_SCHEMA: ${DATABASE_SCHEMA:-fba_mini}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app/backend:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - fba-network
+
+  # ==========================================
+  # pgAdmin（可选）- 数据库管理工具
+  # ==========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fba-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+    networks:
+      - fba-network
+
+# ==========================================
+# 网络
+# ==========================================
+networks:
+  fba-network:
+    driver: bridge
+
+# ==========================================
+# 数据卷
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
