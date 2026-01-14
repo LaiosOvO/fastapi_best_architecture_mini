@@ -21,11 +21,67 @@ class Settings(BaseSettings):
     # .env 当前环境
     ENVIRONMENT: Literal['dev', 'prod']
 
+    # FastAPI
+    FASTAPI_API_V1_PATH: str = '/api/v1'
+    FASTAPI_TITLE: str = 'fba'
+    FASTAPI_DESCRIPTION: str = 'FastAPI Best Architecture'
+    FASTAPI_DOCS_URL: str = '/docs'
+    FASTAPI_REDOC_URL: str = '/redoc'
+    FASTAPI_OPENAPI_URL: str | None = '/openapi'
+    FASTAPI_STATIC_FILES: bool = True
+
+    # CORS
+    CORS_ALLOWED_ORIGINS: list[str] = [  # 末尾不带斜杠
+        'http://127.0.0.1:8000',
+        'http://localhost:5173',
+    ]
+    CORS_EXPOSE_HEADERS: list[str] = [
+        'X-Request-ID',
+    ]
+
+    # 中间件配置
+    MIDDLEWARE_CORS: bool = True
+
+    # Token 加密密钥
+    TOKEN_SECRET_KEY: str = '1VkVF75nsNABBjK_7-qz7GtzNy3AMvktc9TCPwKczCk'  # 默认值，生产环境请修改
+
     DATABASE_TYPE: Literal['mysql', 'postgresql']
     DATABASE_HOST: str
     DATABASE_PORT: int
     DATABASE_USER: str
     DATABASE_PASSWORD: str
+
+    # 数据库
+    DATABASE_ECHO: bool | Literal['debug'] = False
+    DATABASE_POOL_ECHO: bool | Literal['debug'] = False
+    DATABASE_SCHEMA: str = 'fba'
+    DATABASE_CHARSET: str = 'utf8mb4'
+    DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'autoincrement'
+
+
+    # 时间配置
+    DATETIME_TIMEZONE: str = 'Asia/Shanghai'
+    DATETIME_FORMAT: str = '%Y-%m-%d %H:%M:%S'
+
+    # Trace ID
+    TRACE_ID_REQUEST_HEADER_KEY: str = 'X-Request-ID'
+    TRACE_ID_LOG_LENGTH: int = 32  # UUID 长度，必须小于等于 32
+    TRACE_ID_LOG_DEFAULT_VALUE: str = '-'
+
+
+    # 日志
+    LOG_FORMAT: str = (
+        '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</> | <lvl>{level: <8}</> | <cyan>{request_id}</> | <lvl>{message}</>'
+    )
+
+    # 日志（控制台）
+    LOG_STD_LEVEL: str = 'INFO'
+
+    # 日志（文件）
+    LOG_FILE_ACCESS_LEVEL: str = 'INFO'
+    LOG_FILE_ERROR_LEVEL: str = 'ERROR'
+    LOG_ACCESS_FILENAME: str = 'fba_access.log'
+    LOG_ERROR_FILENAME: str = 'fba_error.log'
 
     @model_validator(mode='before')
     @classmethod
@@ -48,6 +104,4 @@ def get_settings() -> Settings:
         shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
     return Settings()
 
-setting = get_settings()
-
-print(setting)
+settings = get_settings()
