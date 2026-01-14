@@ -11,7 +11,7 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 
 from backend.common.enums import DataBaseType, PrimaryKeyType
 from backend.utils.timezone import timezone
-# from backend.utils.snowflake import snowflake
+from backend.utils.snowflake import snowflake
 from backend.core.conf import settings
 
 import base64
@@ -19,7 +19,6 @@ import hashlib
 import json
 import secrets
 
-snowflake = {}
 
 id_key = Annotated[
     int,

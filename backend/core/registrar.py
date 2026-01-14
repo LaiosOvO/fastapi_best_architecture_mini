@@ -4,6 +4,10 @@ from backend import __version__
 from asyncio import create_task
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from fastapi_limiter import FastAPILimiter
+# from backend.utils.health_check import ensure_unique_route_names, http_limit_callback
+
+from backend.database.redis import redis_client
 
 from fastapi_pagination import add_pagination
 
@@ -21,6 +25,7 @@ from backend.utils.serializers import MsgSpecJSONResponse
 from fastapi import Depends, FastAPI
 
 from backend.database.db import create_tables
+from backend.utils.snowflake import snowflake
 
 
 @asynccontextmanager
@@ -35,17 +40,17 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     await create_tables()
 
     # 初始化 redis
-    # await redis_client.open()
-    #
+    await redis_client.open()
+
     # # 初始化 limiter
     # await FastAPILimiter.init(
     #     redis=redis_client,
     #     prefix=settings.REQUEST_LIMITER_REDIS_PREFIX,
     #     http_callback=http_limit_callback,
     # )
-    #
-    # # 初始化 snowflake 节点
-    # await snowflake.init()
+
+    # 初始化 snowflake 节点
+    await snowflake.init()
 
     # 创建操作日志任务
     # create_task(OperaLogMiddleware.consumer())
@@ -53,10 +58,10 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # 释放 snowflake 节点
-    # await snowflake.shutdown()
+    await snowflake.shutdown()
 
     # 关闭 redis 连接
-    # await redis_client.aclose()
+    await redis_client.aclose()
 
 
 def register_app() -> FastAPI:

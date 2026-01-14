@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     DATABASE_POOL_ECHO: bool | Literal['debug'] = False
     DATABASE_SCHEMA: str = 'fba'
     DATABASE_CHARSET: str = 'utf8mb4'
-    DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'autoincrement'
+    DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'snowflake'
 
 
     # 时间配置
@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     MONGODB_PASSWORD: str = '123456'
     MONGODB_DATABASE: str = 'fba'
     MONGODB_TIMEOUT: int = 5
+
+    # Snowflake (ID 生成算法)
+    SNOWFLAKE_DATACENTER_ID: int | None = None  # 数据中心ID，None表示使用Redis动态分配
+    SNOWFLAKE_WORKER_ID: int | None = None      # 工作机器ID，None表示使用Redis动态分配
+    SNOWFLAKE_REDIS_PREFIX: str = 'fba:snowflake'  # Redis键前缀
+    SNOWFLAKE_NODE_TTL_SECONDS: int = 30           # 节点TTL（秒）
+    SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS: int = 10 # 心跳间隔（秒）
 
     # 日志（文件）
     LOG_FILE_ACCESS_LEVEL: str = 'INFO'

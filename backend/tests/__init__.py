@@ -1,0 +1,3 @@
+"""
+Snowflake tests package initialization
+"""
