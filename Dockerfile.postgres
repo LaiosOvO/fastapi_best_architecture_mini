@@ -1,0 +1,109 @@
+# ===========================================
+# PostgreSQL 全能数据库镜像
+# ===========================================
+#
+# 包含以下扩展：
+# - PostGIS 3.4 (地理空间)
+# - TimescaleDB 2.x (时序数据)
+# - PGVector 0.7 (向量搜索)
+# - AGE 1.5 (图数据库)
+# - pg_trgm (模糊搜索)
+# - uuid-ossp (UUID)
+# - pgcrypto (加密)
+#
+
+FROM postgres:16-bookworm
+
+LABEL maintainer="FastAPI Best Architecture"
+LABEL description="PostgreSQL with PostGIS, TimescaleDB, PGVector, AGE extensions"
+
+# 设置环境变量
+ENV POSTGRES_DB=fba_mini
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+
+# 使用阿里云 Debian 镜像源
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+
+# 安装依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    build-essential \
+    git \
+    postgresql-server-dev-16 \
+    libreadline-dev \
+    bison \
+    flex \
+    && rm -rf /var/lib/apt/lists/*
+
+# ==========================================
+# 安装 PostGIS
+# ==========================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-16-postgis-3 \
+    postgresql-16-postgis-3-scripts \
+    && rm -rf /var/lib/apt/lists/*
+
+# ==========================================
+# 安装 TimescaleDB
+# ==========================================
+RUN echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/timescaledb.list \
+    && curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends timescaledb-2-postgresql-16 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ==========================================
+# 安装 PGVector
+# ==========================================
+RUN cd /tmp \
+    && git clone --branch v0.7.4 https://github.com/pgvector/pgvector.git \
+    && cd pgvector \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf pgvector
+
+# ==========================================
+# 安装 AGE
+# ==========================================
+RUN cd /tmp \
+    && git clone https://github.com/apache/age.git \
+    && cd age \
+    && git checkout release/PG16/1.5.0 \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf age
+
+# ==========================================
+# 清理构建依赖
+# ==========================================
+RUN apt-get purge -y --auto-remove \
+    build-essential \
+    git \
+    postgresql-server-dev-16 \
+    libreadline-dev \
+    bison \
+    flex \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ==========================================
+# 配置 PostgreSQL
+# ==========================================
+# 复制初始化脚本
+COPY scripts/database/init_extensions.sql /docker-entrypoint-initdb.d/10-init-extensions.sql
+
+# 配置 shared_preload_libraries
+RUN echo "shared_preload_libraries = 'timescaledb,age'" >> /usr/share/postgresql/postgresql.conf.sample
+
+# 暴露端口
+EXPOSE 5432
+
+# 数据卷
+VOLUME ["/var/lib/postgresql/data"]

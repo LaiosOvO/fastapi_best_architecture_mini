@@ -1,0 +1,436 @@
+# FastAPI Best Architecture Mini - S3 Compatible File Systems
+# 数据根目录: /Volumes/T7/programe/env/docker
+# 使用方法: docker-compose -f docker-compose-file.yml up -d <service_name>
+
+networks:
+  fba_network:
+    driver: bridge
+
+services:
+  # ==================== MinIO ====================
+  # 最流行的开源 S3 兼容对象存储
+  # 特点: 高性能、易部署、支持纠删码、原生 S3 API
+  # 适用: 通用对象存储、数据湖、备份归档
+
+  # MinIO 单节点模式
+  minio:
+    image: minio/minio:latest
+    container_name: fba_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      TZ: Asia/Shanghai
+    ports:
+      - "9001:9001"   # Console
+      - "9002:9000"   # API
+    volumes:
+      - /Volumes/T7/programe/env/docker/minio/data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 分布式模式 (4节点示例)
+  minio-distributed-1:
+    image: minio/minio:latest
+    container_name: fba_minio_distributed_1
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - /Volumes/T7/programe/env/docker/minio-distributed/data1:/data
+    command: server http://minio-distributed-{1...4}/data --console-address ":9001"
+    networks:
+      - fba_network
+
+  minio-distributed-2:
+    image: minio/minio:latest
+    container_name: fba_minio_distributed_2
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - /Volumes/T7/programe/env/docker/minio-distributed/data2:/data
+    command: server http://minio-distributed-{1...4}/data --console-address ":9001"
+    networks:
+      - fba_network
+
+  minio-distributed-3:
+    image: minio/minio:latest
+    container_name: fba_minio_distributed_3
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - /Volumes/T7/programe/env/docker/minio-distributed/data3:/data
+    command: server http://minio-distributed-{1...4}/data --console-address ":9001"
+    networks:
+      - fba_network
+
+  minio-distributed-4:
+    image: minio/minio:latest
+    container_name: fba_minio_distributed_4
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9003:9001"   # Console
+      - "9004:9000"   # API
+    volumes:
+      - /Volumes/T7/programe/env/docker/minio-distributed/data4:/data
+    command: server http://minio-distributed-{1...4}/data --console-address ":9001"
+    networks:
+      - fba_network
+
+  # ==================== SeaweedFS ====================
+  # 分布式文件系统，适合海量小文件
+  # 特点: 高吞吐、自动复制、支持 S3/Filer/HDFS 接口
+  # 适用: 图片存储、日志存储、海量小文件场景
+
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: fba_seaweedfs_master
+    restart: unless-stopped
+    ports:
+      - "9333:9333"   # Master HTTP
+      - "19333:19333" # Master gRPC
+    volumes:
+      - /Volumes/T7/programe/env/docker/seaweedfs/master:/data
+    command: master -ip=seaweedfs-master -ip.bind=0.0.0.0 -metricsPort=9324
+    networks:
+      - fba_network
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: fba_seaweedfs_volume
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # Volume HTTP
+      - "18080:18080" # Volume gRPC
+    volumes:
+      - /Volumes/T7/programe/env/docker/seaweedfs/volume:/data
+    command: volume -mserver="seaweedfs-master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325
+    networks:
+      - fba_network
+    depends_on:
+      - seaweedfs-master
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: fba_seaweedfs_filer
+    restart: unless-stopped
+    ports:
+      - "8888:8888"   # Filer HTTP
+      - "18888:18888" # Filer gRPC
+    volumes:
+      - /Volumes/T7/programe/env/docker/seaweedfs/filer:/data
+    command: filer -master="seaweedfs-master:9333" -ip.bind=0.0.0.0 -metricsPort=9326
+    networks:
+      - fba_network
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+
+  seaweedfs-s3:
+    image: chrislusf/seaweedfs:latest
+    container_name: fba_seaweedfs_s3
+    restart: unless-stopped
+    ports:
+      - "8333:8333"   # S3 API
+    command: s3 -filer="seaweedfs-filer:8888" -ip.bind=0.0.0.0 -config=/etc/seaweedfs/s3.json
+    volumes:
+      - /Volumes/T7/programe/env/docker/seaweedfs/s3/s3.json:/etc/seaweedfs/s3.json
+    networks:
+      - fba_network
+    depends_on:
+      - seaweedfs-filer
+
+  # ==================== Garage ====================
+  # 轻量级自托管 S3 兼容存储
+  # 特点: 轻量、Rust编写、支持地理分布、抗网络分区
+  # 适用: 个人/小团队自托管、边缘存储
+
+  garage:
+    image: dxflrs/garage:v0.9.3
+    container_name: fba_garage
+    restart: unless-stopped
+    ports:
+      - "3900:3900"   # S3 API
+      - "3901:3901"   # Admin API
+      - "3902:3902"   # Web (可选)
+    volumes:
+      - /Volumes/T7/programe/env/docker/garage/data:/var/lib/garage/data
+      - /Volumes/T7/programe/env/docker/garage/meta:/var/lib/garage/meta
+      - /Volumes/T7/programe/env/docker/garage/garage.toml:/etc/garage.toml
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3900/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== Zenko CloudServer ====================
+  # 开源多云数据控制器 (原 S3 Server)
+  # 特点: 完整 S3 API、支持多后端、数据复制
+  # 适用: 混合云存储、S3 API 网关
+
+  cloudserver:
+    image: zenko/cloudserver:latest
+    container_name: fba_cloudserver
+    restart: unless-stopped
+    environment:
+      SCALITY_ACCESS_KEY_ID: accesskey
+      SCALITY_SECRET_ACCESS_KEY: secretkey
+      S3DATA: file
+      S3BACKEND: file
+      REMOTE_MANAGEMENT_DISABLE: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - /Volumes/T7/programe/env/docker/cloudserver/data:/usr/src/app/localData
+      - /Volumes/T7/programe/env/docker/cloudserver/metadata:/usr/src/app/localMetadata
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/_/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== LocalStack (S3) ====================
+  # AWS 本地模拟器
+  # 特点: 完整 AWS API 模拟、适合开发测试
+  # 适用: 本地开发、CI/CD 测试
+
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: fba_localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      DEBUG: 0
+      DATA_DIR: /var/lib/localstack/data
+      PERSISTENCE: 1
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"   # LocalStack Gateway
+      - "4510-4559:4510-4559"  # 外部服务端口范围
+    volumes:
+      - /Volumes/T7/programe/env/docker/localstack/data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== LakeFS ====================
+  # 数据湖版本控制系统
+  # 特点: Git-like 操作、支持分支/合并/回滚、S3 兼容
+  # 适用: 数据湖、MLOps、数据版本管理
+
+  lakefs:
+    image: treeverse/lakefs:1.3
+    container_name: fba_lakefs
+    restart: unless-stopped
+    environment:
+      LAKEFS_DATABASE_TYPE: local
+      LAKEFS_DATABASE_LOCAL_PATH: /home/lakefs/.lakefs/metadata
+      LAKEFS_BLOCKSTORE_TYPE: local
+      LAKEFS_BLOCKSTORE_LOCAL_PATH: /home/lakefs/.lakefs/data
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: some-random-secret-key
+      LAKEFS_LOGGING_LEVEL: INFO
+      LAKEFS_STATS_ENABLED: "false"
+    ports:
+      - "8001:8000"
+    volumes:
+      - /Volumes/T7/programe/env/docker/lakefs/data:/home/lakefs/.lakefs
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/_health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== Ceph (RadosGW) ====================
+  # 企业级分布式存储 (需要较多资源)
+  # 特点: 企业级、高可用、支持块/对象/文件存储
+  # 适用: 大规模企业存储、私有云
+
+  ceph-demo:
+    image: ceph/demo:latest
+    container_name: fba_ceph
+    restart: unless-stopped
+    environment:
+      MON_IP: 127.0.0.1
+      CEPH_PUBLIC_NETWORK: 0.0.0.0/0
+      CEPH_DEMO_UID: demo
+      CEPH_DEMO_ACCESS_KEY: accesskey
+      CEPH_DEMO_SECRET_KEY: secretkey
+      CEPH_DEMO_BUCKET: demo
+      RGW_NAME: localhost
+    ports:
+      - "8080:8080"   # RadosGW (S3 API)
+      - "5000:5000"   # Dashboard
+    volumes:
+      - /Volumes/T7/programe/env/docker/ceph/etc:/etc/ceph
+      - /Volumes/T7/programe/env/docker/ceph/lib:/var/lib/ceph
+    networks:
+      - fba_network
+
+  # ==================== OpenIO ====================
+  # 企业级对象存储
+  # 特点: 高性能、支持 S3/Swift API、自动数据放置
+  # 适用: 企业对象存储、大数据
+
+  openio:
+    image: openio/sds:latest
+    container_name: fba_openio
+    restart: unless-stopped
+    environment:
+      OPENIO_IPADDR: 0.0.0.0
+    ports:
+      - "6007:6007"   # S3 API
+    volumes:
+      - /Volumes/T7/programe/env/docker/openio/data:/var/lib/oio
+    networks:
+      - fba_network
+
+  # ==================== Mock S3 / Fake S3 ====================
+  # 轻量级 S3 模拟器
+  # 特点: 极轻量、快速启动、适合测试
+  # 适用: 单元测试、快速原型
+
+  # S3Mock (Adobe)
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: fba_s3mock
+    restart: unless-stopped
+    environment:
+      initialBuckets: test-bucket
+      root: /data
+    ports:
+      - "9090:9090"   # HTTP
+      - "9191:9191"   # HTTPS
+    volumes:
+      - /Volumes/T7/programe/env/docker/s3mock/data:/data
+    networks:
+      - fba_network
+
+  # ==================== FileBrowser ====================
+  # Web 文件管理器 (非 S3，但常用于文件管理)
+  # 特点: Web UI、支持多用户、文件分享
+  # 适用: 简单文件管理、团队文件共享
+
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: fba_filebrowser
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+    ports:
+      - "8089:80"
+    volumes:
+      - /Volumes/T7/programe/env/docker/filebrowser/data:/srv
+      - /Volumes/T7/programe/env/docker/filebrowser/database.db:/database.db
+      - /Volumes/T7/programe/env/docker/filebrowser/config.json:/.filebrowser.json
+    networks:
+      - fba_network
+
+  # ==================== Nextcloud ====================
+  # 开源云存储/协作平台
+  # 特点: 功能丰富、支持插件、WebDAV/文件同步
+  # 适用: 企业云盘、团队协作
+
+  nextcloud:
+    image: nextcloud:28-apache
+    container_name: fba_nextcloud
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud123
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin123
+    ports:
+      - "8090:80"
+    volumes:
+      - /Volumes/T7/programe/env/docker/nextcloud/html:/var/www/html
+      - /Volumes/T7/programe/env/docker/nextcloud/data:/var/www/html/data
+    networks:
+      - fba_network
+
+  nextcloud-mysql:
+    image: mysql:8.0
+    container_name: fba_nextcloud_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud123
+    volumes:
+      - /Volumes/T7/programe/env/docker/nextcloud/mysql:/var/lib/mysql
+    networks:
+      - fba_network
+
+  # ==================== Seafile ====================
+  # 开源企业云盘
+  # 特点: 文件同步、版本控制、加密、协作
+  # 适用: 企业文件同步、团队协作
+
+  seafile:
+    image: seafileltd/seafile-mc:11.0-latest
+    container_name: fba_seafile
+    restart: unless-stopped
+    environment:
+      DB_HOST: seafile-mysql
+      DB_ROOT_PASSWD: rootpassword
+      SEAFILE_ADMIN_EMAIL: admin@seafile.local
+      SEAFILE_ADMIN_PASSWORD: admin123
+      SEAFILE_SERVER_LETSENCRYPT: "false"
+      SEAFILE_SERVER_HOSTNAME: localhost
+    ports:
+      - "8091:80"
+    volumes:
+      - /Volumes/T7/programe/env/docker/seafile/data:/shared
+    networks:
+      - fba_network
+    depends_on:
+      - seafile-mysql
+      - seafile-memcached
+
+  seafile-mysql:
+    image: mariadb:10.11
+    container_name: fba_seafile_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_LOG_CONSOLE: "true"
+    volumes:
+      - /Volumes/T7/programe/env/docker/seafile/mysql:/var/lib/mysql
+    networks:
+      - fba_network
+
+  seafile-memcached:
+    image: memcached:1.6
+    container_name: fba_seafile_memcached
+    restart: unless-stopped
+    entrypoint: memcached -m 256
+    networks:
+      - fba_network

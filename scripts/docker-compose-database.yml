@@ -1,0 +1,424 @@
+# FastAPI Best Architecture Mini - Database Services
+# 数据根目录: /Volumes/T7/programe/env/docker
+# 使用方法: docker-compose -f docker-compose-database.yml up -d <service_name>
+
+x-data-root: &data-root /Volumes/T7/programe/env/docker
+
+networks:
+  fba_network:
+    driver: bridge
+
+services:
+  # ==================== 关系型数据库 ====================
+
+  # MySQL 8.0
+  mysql:
+    image: mysql:8.0
+    container_name: fba_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: fba
+      MYSQL_USER: fba_user
+      MYSQL_PASSWORD: 123456
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - /Volumes/T7/programe/env/docker/mysql/data:/var/lib/mysql
+      - /Volumes/T7/programe/env/docker/mysql/conf.d:/etc/mysql/conf.d
+      - /Volumes/T7/programe/env/docker/mysql/init:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - fba_network
+
+
+  # PostgreSQL 16
+  postgres:
+    image: psql/16/all:laios-v1
+    container_name: fba_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: fba
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - /Volumes/T7/programe/env/docker/postgres/data:/var/lib/postgresql/data
+      - ./database/init_extensions.sql:/docker-entrypoint-initdb.d/init_extensions.sql
+    networks:
+      - fba_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ==================== NoSQL 数据库 ====================
+
+  # MongoDB 7.0
+  mongodb:
+    image: mongo:7.0
+    container_name: fba_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      MONGO_INITDB_DATABASE: fba
+      TZ: Asia/Shanghai
+    ports:
+      - "27017:27017"
+    volumes:
+      - /Volumes/T7/programe/env/docker/mongodb/data:/data/db
+      - /Volumes/T7/programe/env/docker/mongodb/init:/docker-entrypoint-initdb.d
+    networks:
+      - fba_network
+#    healthcheck:
+#      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/fba --quiet
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # Redis (带密码)
+  redis-auth:
+    image: redis:7-alpine
+    container_name: fba_redis_auth
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "6380:6379"
+    volumes:
+      - /Volumes/T7/programe/env/docker/redis-auth/data:/data
+    command: redis-server --appendonly yes --requirepass "123456"
+    networks:
+      - fba_network
+#    healthcheck:
+#      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 搜索引擎 ====================
+
+
+  # Elasticsearch (带安全认证)
+#  elasticsearch-secure:
+#    image: elasticsearch:8.12.0
+#    container_name: fba_elasticsearch_secure
+#    environment:
+#      - discovery.type=single-node
+#      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+#      - xpack.security.enabled=true
+#      - ELASTIC_PASSWORD=123456
+#      - TZ=Asia/Shanghai
+#    ports:
+#      - "9201:9200"
+#      - "9301:9300"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/elasticsearch-secure/data:/usr/share/elasticsearch/data
+#    networks:
+#      - fba_network
+
+  # ==================== 消息队列 ====================
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: fba_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      TZ: Asia/Shanghai
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - /Volumes/T7/programe/env/docker/rabbitmq/data:/var/lib/rabbitmq
+    networks:
+      - fba_network
+#    healthcheck:
+#      test: rabbitmq-diagnostics -q ping
+#      interval: 30s
+#      timeout: 10s
+#      retries: 5
+
+  # ==================== 时序数据库 ====================
+
+  # InfluxDB 2.x
+#  influxdb:
+#    image: influxdb:2.7-alpine
+#    container_name: fba_influxdb
+#    environment:
+#      DOCKER_INFLUXDB_INIT_MODE: setup
+#      DOCKER_INFLUXDB_INIT_USERNAME: admin
+#      DOCKER_INFLUXDB_INIT_PASSWORD: 12345678
+#      DOCKER_INFLUXDB_INIT_ORG: fba
+#      DOCKER_INFLUXDB_INIT_BUCKET: fba
+#      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-auth-token
+#      TZ: Asia/Shanghai
+#    ports:
+#      - "8086:8086"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/influxdb/data:/var/lib/influxdb2
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "influx", "ping"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 分析型数据库 ====================
+
+  # ClickHouse
+#  clickhouse:
+#    image: clickhouse/clickhouse-server:24.1
+#    container_name: fba_clickhouse
+#    environment:
+#      CLICKHOUSE_USER: default
+#      CLICKHOUSE_PASSWORD: 123456
+#      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+#      TZ: Asia/Shanghai
+#    ports:
+#      - "8123:8123"
+#      - "9000:9000"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/clickhouse/data:/var/lib/clickhouse
+#    ulimits:
+#      nofile:
+#        soft: 262144
+#        hard: 262144
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 图数据库 ====================
+
+  # Neo4j
+#  neo4j:
+#    image: neo4j:5.16-community
+#    container_name: fba_neo4j
+#    environment:
+#      NEO4J_AUTH: neo4j/12345678
+#      NEO4J_PLUGINS: '["apoc"]'
+#      TZ: Asia/Shanghai
+#    ports:
+#      - "7474:7474"
+#      - "7687:7687"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/neo4j/data:/data
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 分布式数据库 ====================
+
+  # TiDB (MySQL 兼容)
+  tidb:
+    image: pingcap/tidb:v7.5.0
+    container_name: fba_tidb
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+      - "10080:10080"
+    volumes:
+      - /Volumes/T7/programe/env/docker/tidb/data:/tmp/tidb
+    networks:
+      - fba_network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:10080/status"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 对象存储 ====================
+
+  # MinIO (S3 兼容)
+#  minio:
+#    image: minio/minio:latest
+#    container_name: fba_minio
+#    environment:
+#      MINIO_ROOT_USER: minioadmin
+#      MINIO_ROOT_PASSWORD: minioadmin123
+#      TZ: Asia/Shanghai
+#    ports:
+#      - "9001:9001"
+#      - "9002:9000"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/minio/data:/data
+#    command: server /data --console-address ":9001"
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 向量数据库 ====================
+
+  # Milvus (向量数据库)
+  milvus-standalone:
+    image: milvusdb/milvus:v2.3.5
+    container_name: fba_milvus
+    restart: unless-stopped
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio-milvus:9000
+      TZ: Asia/Shanghai
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - /Volumes/T7/programe/env/docker/milvus/data:/var/lib/milvus
+    command: ["milvus", "run", "standalone"]
+    networks:
+      - fba_network
+    depends_on:
+      - etcd
+      - minio-milvus
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: fba_milvus_etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - /Volumes/T7/programe/env/docker/milvus/etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - fba_network
+
+  minio-milvus:
+    image: minio/minio:latest
+    container_name: fba_milvus_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - /Volumes/T7/programe/env/docker/milvus/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    networks:
+      - fba_network
+
+  # Qdrant (向量数据库)
+#  qdrant:
+#    image: qdrant/qdrant:v1.7.4
+#    container_name: fba_qdrant
+#    restart: unless-stopped
+#    ports:
+#      - "6333:6333"
+#      - "6334:6334"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/qdrant/data:/qdrant/storage
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # Chroma (向量数据库)
+#  chroma:
+#    image: chromadb/chroma:0.4.22
+#    container_name: fba_chroma
+#    restart: unless-stopped
+#    ports:
+#      - "8001:8000"
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/chroma/data:/chroma/chroma
+#    environment:
+#      IS_PERSISTENT: "TRUE"
+#      ANONYMIZED_TELEMETRY: "FALSE"
+#    networks:
+#      - fba_network
+
+  # Weaviate (向量数据库)
+#  weaviate:
+#    image: semitechnologies/weaviate:1.23.7
+#    container_name: fba_weaviate
+#    restart: unless-stopped
+#    ports:
+#      - "8087:8080"
+#      - "50051:50051"
+#    environment:
+#      QUERY_DEFAULTS_LIMIT: 25
+#      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+#      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+#      DEFAULT_VECTORIZER_MODULE: 'none'
+#      CLUSTER_HOSTNAME: 'node1'
+#    volumes:
+#      - /Volumes/T7/programe/env/docker/weaviate/data:/var/lib/weaviate
+#    networks:
+#      - fba_network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/.well-known/ready"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  # ==================== 数据库管理工具 ====================
+
+#
+#  # Mongo Express (MongoDB 管理)
+#  mongo-express:
+#    image: mongo-express:1.0
+#    container_name: fba_mongo_express
+#    restart: unless-stopped
+#    environment:
+#      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+#      ME_CONFIG_MONGODB_ADMINPASSWORD: 123456
+#      ME_CONFIG_MONGODB_URL: mongodb://root:123456@mongodb:27017/
+#      ME_CONFIG_BASICAUTH_USERNAME: admin
+#      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+#    ports:
+#      - "8084:8081"
+#    networks:
+#      - fba_network
+#    depends_on:
+#      - mongodb
+
+#  # Redis Commander (Redis 管理)
+#  redis-commander:
+#    image: rediscommander/redis-commander:latest
+#    container_name: fba_redis_commander
+#    restart: unless-stopped
+#    environment:
+#      REDIS_HOSTS: local:redis:6379
+#    ports:
+#      - "8085:8081"
+#    networks:
+#      - fba_network
+#    depends_on:
+#      - redis
+
+  # Kibana (Elasticsearch 管理)
+#  kibana:
+#    image: kibana:8.12.0
+#    container_name: fba_kibana
+#    restart: unless-stopped
+#    environment:
+#      ELASTICSEARCH_HOSTS: '["http://elasticsearch-secure:9200"]'
+#      ELASTICSEARCH_USERNAME: elastic
+#      ELASTICSEARCH_PASSWORD: 123456
+#    ports:
+#      - "5601:5601"
+#    networks:
+#      - fba_network
+#    depends_on:
+#      - elasticsearch-secure
