@@ -80,6 +80,21 @@ class Settings(BaseSettings):
     # 日志（控制台）
     LOG_STD_LEVEL: str = 'INFO'
 
+    # Redis
+    REDIS_HOST: str = '127.0.0.1'
+    REDIS_PORT: int = 6380  # Auth port from docker-compose
+    REDIS_PASSWORD: str = '123456'  # Auth password from docker-compose
+    REDIS_DATABASE: int = 0
+    REDIS_TIMEOUT: int = 5
+
+    # MongoDB
+    MONGODB_HOST: str = '127.0.0.1'
+    MONGODB_PORT: int = 27017
+    MONGODB_USER: str = 'root'
+    MONGODB_PASSWORD: str = '123456'
+    MONGODB_DATABASE: str = 'fba'
+    MONGODB_TIMEOUT: int = 5
+
     # 日志（文件）
     LOG_FILE_ACCESS_LEVEL: str = 'INFO'
     LOG_FILE_ERROR_LEVEL: str = 'ERROR'
