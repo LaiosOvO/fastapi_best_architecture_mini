@@ -28,8 +28,9 @@ class Location(Base):
 
     # PostGIS 空间列 - 使用 SRID 4326 (WGS84 坐标系)
     # 存储格式: POINT(lng lat)，如 POINT(116.4074 39.9042)
+    # spatial_index=False 禁用 GeoAlchemy2 自动创建索引，由 Alembic 管理
     geom: Mapped[str] = mapped_column(
-        Geometry(geometry_type='POINT', srid=4326),
+        Geometry(geometry_type='POINT', srid=4326, spatial_index=False),
         default='',
         comment='地理位置点',
     )
@@ -49,7 +50,8 @@ class Location(Base):
     status: Mapped[int] = mapped_column(default=1, index=True, comment='状态(0停用 1正常)')
 
     __table_args__ = (
-        # GeoAlchemy2 会自动为 Geometry 列创建 GIST 索引，无需手动定义
+        # 空间索引（GIST）- 用于地理位置查询
+        sa.Index('idx_demo_location_geom', 'geom', postgresql_using='gist'),
         {'comment': '位置表（PostGIS 空间数据）'},
     )
 

@@ -90,6 +90,7 @@ class Demo(Base):
         comment='上次登录时间',
     )
     deleted: Mapped[int | None] = mapped_column(default=0,comment="逻辑删除")
+    ext: Mapped[dict | None] = mapped_column(JSONB,default=None,comment='扩展字段')
     # ---------- JSON/JSONB 类型 ----------
     metadata_json: Mapped[dict | None] = mapped_column(
         JSONB,

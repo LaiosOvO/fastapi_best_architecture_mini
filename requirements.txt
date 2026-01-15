@@ -431,3 +431,6 @@ zope-interface==8.1.1
 
 # ai
 langchain_community
+
+# alembic
+psycopg2

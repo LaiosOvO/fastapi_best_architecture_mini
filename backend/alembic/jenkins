@@ -1,0 +1,154 @@
+
+
+pipeline {
+    agent any
+    options {
+        skipDefaultCheckout()
+        timestamps()
+    }
+    parameters {
+        string(name: 'scene_name', defaultValue: 'scene_name', description: '请输入场景名称')
+        string(name: 'data_link', defaultValue: '/data/test/20211130161418_myg_9l.hera', description: '请输入需要处理的数据链接')
+        string(name: 'type', defaultValue: 'tron5', description: '注意:TR050004和TR050006是tron6')
+        string(name:"keyframe_ratio",defaultValue:"0.2",description:"select keyframe ration(by distance)")
+           // string(name:'frame_rate',defaultValue:'1',description:'frame_rate')
+        choice(name: 'whether_dense', choices: ['YES', 'NO'], description: '是否进行稠密重建')
+        choice(name: 'whether_only_run_dense', choices: ['NO', 'YES'], description: '是否只进行稠密重建单一步骤')
+        choice(name: 'whether_ignore_sfm', choices: ['NO', 'YES'], description: '是否忽略sift sfm 步骤')
+        choice(name: 'whether_use_fs', choices: ['true', 'false'], description: ' 是否用 feature scale 去约束 ba')
+        choice(name: 'whether_pure_vision', choices: ['false', 'true'], description: '是否进行纯视觉建图')
+       booleanParam(name:'skip_undistort',defaultValue: false,description:'undistort images')
+       booleanParam(name:'skip_colmap_dense',defaultValue:false,description:'patchmatch dense')
+       booleanParam(name:'skip_colmap_fusion',defaultValue:false,description:'fusion point')
+       booleanParam(name:'skip_interfacecolmap',defaultValue:true,description:'interface openmvs')
+       booleanParam(name:'skip_openmvs_dense',defaultValue:true,description:'dense by openmvs')
+       booleanParam(name:'skip_openmvs_mesh',defaultValue:true,description:'mesh')
+       booleanParam(name:'skip_openmvs_refinemesh',defaultValue:true,description:'mesh refine')
+       booleanParam(name:'skip_openmvs_texture',defaultValue:true,description:'texture')
+        choice(name: 'level', choices: ['m', 'l', 'h'], description: '稠密建图的level(m/M:中模 ， l/L :低模 ， h/H:精模')
+    }
+    environment {
+        DENSE_FLAG  = "${params.whether_dense}"
+    }
+    stages {
+         stage('hera2visual_sfm') {
+            when {
+              //
+                expression { params.whether_only_run_dense == 'NO' && params.whether_ignore_sfm == 'NO'  }
+            }
+             steps {
+                 script{
+                    // String yamlName = 'cam' + params.device_type.split('tron')[-1]
+                    String calibration = device_type
+                    String shellCommand = "cd /data/tmp/tool_back &&  sudo cp  -r ${calibration} ${params.scene_name}/319"
+                    // String shellCommand = "cd /data/ &&  sudo cp ${yamlName}.yaml /data/${params.scene_name}/319"
+                    sh """
+                    ${shellCommand}
+                     """
+
+                     String heraName = params.data_link.split('/')[-1]
+                     String dockerCommand = 'sudo docker run --rm --gpus all '
+                     String volumeParams = " -v ${params.scene_name}/319:/data -w /data "
+                     String imageParams = 'hub.newayz.com/pgv/hera-vismap:v2.4.6 '
+                     String pythonCommand = " sh -c \'python3 /app/Run_SfM_pipe_vision.py --hera_path /data/${heraName} --sensor ${params.type} --database database.db    --calibration_path /data/${calibration}   --fsba  ${params.whether_use_fs}  --pure_vision ${params.whether_pure_vision}  --ratio ${params.keyframe_ratio}\' "
+
+                     String fullCommand = dockerCommand + volumeParams + imageParams + pythonCommand
+                    //  utils.remoteExecute(fullCommand)
+                    println(fullCommand)
+                    sh """
+                   ${fullCommand}
+                     """
+
+                 }
+             }
+         }
+
+        stage(' parallel  AR map  & visual dense map')
+        {
+            parallel {
+                    stage('AR location map build') {
+                    when {
+                        //
+                        expression { params.whether_only_run_dense == 'NO' }
+                    }
+                    steps {
+                        script{
+                            String dockerCommand = 'sudo docker run --rm --gpus all '
+                            String volumeParams = " -v ${params.scene_name}/319:/data -w /data "
+                            String imageParams = 'hub.newayz.com/pgv/eywa_processor_triton:1.6.4'
+                            String pythonCommand = " sh -c \'python3 /app/processor/preprocess_clip_images.py  --assets_path /data --rewrite True --url 10.206.16.9:8001  \' "
+                            String fullCommand = dockerCommand + volumeParams + imageParams + pythonCommand
+                            println(fullCommand)
+                            sh """
+                                ${fullCommand}
+
+                            """
+                        }
+                        script{
+                            String dockerCommand = 'sudo docker run --rm --gpus all '
+                            String volumeParams = " -v ${params.scene_name}/319:/data -w /data "
+                            String imageParams = 'hub.newayz.com/pgv/eywa_processor_triton:1.6.3'
+                            String pythonCommand = " sh -c \'python3 /app/processor/build_clip_scene.py --assets_path /data  \' "
+                            String fullCommand = dockerCommand + volumeParams + imageParams + pythonCommand
+                            println(fullCommand)
+                            sh """
+                            ${fullCommand}
+
+                            """
+
+
+                        }
+
+
+
+                    }
+                }
+
+                stage('visual dense map build') {
+                when {
+                //
+                environment name: 'DENSE_FLAG',
+                value: 'YES'
+                }
+                steps {
+                    script{
+                        // out = sh(script: "[ -f /data/${params.scene_name}/319/sfm/map/StartPoint.txt ]  && echo 'true' || echo 'false' ", returnStdout: true)
+                        if(expression {fileExists("${params.scene_name}/319/sfm")})
+                        {
+                            String dockerCommand = 'sudo docker run --rm --gpus all '
+                            String volumeParams = " -v ${params.scene_name}/319:/data -w /data "
+                            String imageParams = 'hub.newayz.com/pgv/dense_point_cpu:v1.2.2 '
+                            boolean skip_undistort = params.skip_undistort
+                            boolean skip_colmap_dense = params.skip_colmap_dense
+                            boolean skip_colmap_fusion = params.skip_colmap_fusion
+                            boolean skip_interfacecolmap = params.skip_interfacecolmap
+                            boolean skip_openmvs_dense = params.skip_openmvs_dense
+                            boolean skip_openmvs_mesh = params.skip_openmvs_mesh
+                            boolean skip_openmvs_refinemesh = params.skip_openmvs_refinemesh
+                            boolean skip_openmvs_texture = params.skip_openmvs_texture
+                            String level = params.level
+                            String pythonCommand = " sh -c \'python3 /app/run_dense.py --workspace /data --skip_undistort ${skip_undistort} --skip_colmap_dense ${skip_colmap_dense} --skip_colmap_fusion ${skip_colmap_fusion} --skip_interfacecolmap ${skip_interfacecolmap} --skip_openmvs_dense ${skip_openmvs_dense} --skip_openmvs_mesh ${skip_openmvs_mesh} --skip_openmvs_refinemesh ${skip_openmvs_refinemesh} --skip_openmvs_texture ${skip_openmvs_texture}   --level ${level}  \' "
+                            String fullCommand = dockerCommand + volumeParams + imageParams + pythonCommand
+                            println(fullCommand)
+                            sh """
+                                  ${fullCommand}
+
+                                """
+                        }
+                        else{
+                            println("sfm folder not exit!")
+                            sh("exit 1")
+                        }
+
+
+                    }
+                }
+            }
+
+            }
+
+        }
+
+
+    }
+}
