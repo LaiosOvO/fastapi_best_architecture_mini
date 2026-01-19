@@ -6,8 +6,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi_limiter import FastAPILimiter
 # from backend.utils.health_check import ensure_unique_route_names, http_limit_callback
+from starlette_context.middleware import ContextMiddleware
 
 from backend.database.redis import redis_client
+from backend.common.response.response_code import StandardResponseCode
 
 from fastapi_pagination import add_pagination
 
@@ -15,6 +17,7 @@ from fastapi_pagination import add_pagination
 from starlette.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
+from backend.common.log import log
 
 # from backend.common.log import set_custom_logfile, setup_logging
 from backend.core.path_conf import STATIC_DIR, UPLOAD_DIR
@@ -119,6 +122,7 @@ def register_static_file(app: FastAPI) -> None:
                   StaticFiles(directory=STATIC_DIR), name='static')
 
 
+from backend.middleware.access_middleware import AccessMiddleware
 def register_middleware(app: FastAPI) -> None:
     """
     注册中间件（执行顺序从下往上）
@@ -126,6 +130,7 @@ def register_middleware(app: FastAPI) -> None:
     :param app: FastAPI 应用实例
     :return:
     """
+    log.info('开始装配 主应用的fastapi的middleware')
     # Opera log
     # app.add_middleware(OperaLogMiddleware)
 
@@ -143,18 +148,18 @@ def register_middleware(app: FastAPI) -> None:
     # app.add_middleware(I18nMiddleware)
 
     # Access log
-    # app.add_middleware(AccessMiddleware)
+    app.add_middleware(AccessMiddleware)
 
     # ContextVar
     # plugins = [OtelTraceIdPlugin()] if settings.GRAFANA_METRICS else [RequestIdPlugin(validate=True)]
-    # app.add_middleware(
-    #     ContextMiddleware,
-    #     plugins=plugins,
-    #     default_error_response=MsgSpecJSONResponse(
-    #         content={'code': StandardResponseCode.HTTP_400, 'msg': 'BAD_REQUEST', 'data': None},
-    #         status_code=StandardResponseCode.HTTP_400,
-    #     ),
-    # )
+    app.add_middleware(
+        ContextMiddleware,
+        # plugins=plugins,
+        default_error_response=MsgSpecJSONResponse(
+            content={'code': StandardResponseCode.HTTP_400, 'msg': 'BAD_REQUEST', 'data': None},
+            status_code=StandardResponseCode.HTTP_400,
+        ),
+    )
 
     # CORS
     # https://github.com/fastapi-practices/fastapi_best_architecture/pull/789/changes

@@ -8,6 +8,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.core.path_conf import ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH
+from re import Pattern
 
 
 class Settings(BaseSettings):
@@ -44,6 +45,21 @@ class Settings(BaseSettings):
 
     # Token 加密密钥
     TOKEN_SECRET_KEY: str = '1VkVF75nsNABBjK_7-qz7GtzNy3AMvktc9TCPwKczCk'  # 默认值，生产环境请修改
+
+    # Token
+    TOKEN_ALGORITHM: str = 'HS256'
+    TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24  # 1 天
+    TOKEN_REFRESH_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
+    TOKEN_REDIS_PREFIX: str = 'fba:token'
+    TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
+    TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
+    TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
+    TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
+        f'{FASTAPI_API_V1_PATH}/auth/login',
+    ]
+    TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = [  # JWT / RBAC 路由白名单（正则）
+        rf'^{FASTAPI_API_V1_PATH}/monitors/(redis|server)$',
+    ]
 
     # 硅基流动 API 配置
     SILICONFLOW_API_KEY: str

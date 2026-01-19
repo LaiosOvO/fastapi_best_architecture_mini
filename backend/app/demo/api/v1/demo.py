@@ -34,6 +34,12 @@ async def get_demo_paginated(
     page_data = await demo_service.get_list(db=db, filter=filter)
     return response_base.success(data=page_data)
 
+@router.get(path='/v1/ping')
+async def ping(request: Request,id: int = Query(default=1)):
+
+    return response_base.success(data='pong')
+
+
 @router.post('/create', summary='创建demo')
 async def create_demo(
     db: CurrentSessionTransaction,
@@ -66,4 +72,6 @@ async def delete_user(db: CurrentSessionTransaction, pk: Annotated[int, Path(des
     if count > 0:
         return response_base.success()
     return response_base.fail()
+
+
 

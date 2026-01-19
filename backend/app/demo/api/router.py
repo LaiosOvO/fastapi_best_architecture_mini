@@ -8,7 +8,7 @@ from backend.app.demo.api.v1.demo_complex import router as demo_complex_router
 
 from backend.core.conf import settings
 
-
+# 使用v1的前缀
 v1 = APIRouter(prefix=settings.FASTAPI_API_V1_PATH)
 
 v1.include_router(document_router, prefix='/documents', tags=['文档管理'])
